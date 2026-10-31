@@ -1,10 +1,13 @@
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
 import '../models/task.dart';
 import '../providers/task_provider.dart';
+import 'tasks_screen.dart';
+
+const Color taskFlowPrimary = Color(0xFF6855E8);
+const Color taskFlowBackground = Color(0xFFF7F8FC);
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,23 +19,21 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int selectedIndex = 0;
 
-  static const Color primaryColor = Color(0xFF6855E8);
-
   Future<void> _addTask() async {
     final task = await showDialog<Task>(
       context: context,
       builder: (_) => const AddTaskDialog(),
     );
 
-    if (task != null && mounted) {
-      await context.read<TaskProvider>().addTask(task);
+    if (task == null || !mounted) return;
 
-      if (!mounted) return;
+    await context.read<TaskProvider>().addTask(task);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Task added successfully!')),
-      );
-    }
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Task added successfully!')));
   }
 
   Future<void> _toggleTask(Task task, bool? value) async {
@@ -59,257 +60,86 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Task deleted successfully!')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Task deleted successfully!')));
+  }
+
+  String get _pageTitle {
+    switch (selectedIndex) {
+      case 1:
+        return 'My Tasks';
+      case 2:
+        return 'Calendar';
+      case 3:
+        return 'Settings';
+      default:
+        return 'TaskFlow';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final taskProvider = context.watch<TaskProvider>();
-    final tasks = taskProvider.tasks;
-
-    final completedTasks = tasks.where((task) => task.isCompleted).length;
-    final progress = tasks.isEmpty ? 0.0 : completedTasks / tasks.length;
+    final pages = <Widget>[
+      _HomeDashboard(
+        onAddTask: _addTask,
+        onToggleTask: _toggleTask,
+        onDeleteTask: _deleteTask,
+        onViewAllTasks: () {
+          setState(() => selectedIndex = 1);
+        },
+      ),
+      const TasksScreen(),
+      const _ComingSoonScreen(
+        icon: Icons.calendar_month_outlined,
+        title: 'Your Calendar',
+        description: 'Your calendar view will be available in the next update.',
+      ),
+      const _ComingSoonScreen(
+        icon: Icons.settings_outlined,
+        title: 'Settings',
+        description:
+            'App preferences and appearance settings will be available here.',
+      ),
+    ];
 
     return Scaffold(
+      backgroundColor: taskFlowBackground,
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF7F8FC),
-        title: const Text(
-          'TaskFlow',
-          style: TextStyle(fontWeight: FontWeight.bold),
+        backgroundColor: taskFlowBackground,
+        title: Text(
+          _pageTitle,
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_outlined),
-          ),
+          if (selectedIndex == 0)
+            IconButton(
+              tooltip: 'Notifications',
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Reminder notifications are coming soon.'),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.notifications_outlined),
+            ),
           const SizedBox(width: 8),
         ],
       ),
-
-      body: SafeArea(
-        child: taskProvider.isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  const Text(
-                    'Hello, Welcome Back!',
-                    style: TextStyle(
-                      fontSize: 25,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Here is your productivity overview.',
-                    style: TextStyle(color: Colors.grey.shade600),
-                  ),
-
-                  const SizedBox(height: 25),
-
-                  // Progress card
-                  Container(
-                    padding: const EdgeInsets.all(22),
-                    decoration: BoxDecoration(
-                      color: primaryColor,
-                      borderRadius: BorderRadius.circular(22),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                "Today's Progress",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                '$completedTasks of ${tasks.length} tasks completed',
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        SizedBox(
-                          width: 65,
-                          height: 65,
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              CircularProgressIndicator(
-                                value: progress,
-                                backgroundColor: Colors.white24,
-                                valueColor:
-                                    const AlwaysStoppedAnimation(Colors.white),
-                                strokeWidth: 7,
-                              ),
-                              Center(
-                                child: Text(
-                                  '${(progress * 100).round()}%',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 28),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "Your Tasks",
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        '${tasks.length} tasks',
-                        style: TextStyle(color: Colors.grey.shade600),
-                      ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 15),
-
-                  if (tasks.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 40,
-                        horizontal: 20,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.task_alt,
-                            size: 55,
-                            color: Colors.grey.shade400,
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'No tasks yet!',
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Tap the + button to create your first task.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey.shade600),
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                    ...tasks.map((task) {
-                      final completed = task.isCompleted;
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Row(
-                          children: [
-                            Checkbox(
-                              value: completed,
-                              activeColor: primaryColor,
-                              onChanged: (value) => _toggleTask(task, value),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    task.title,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      decoration: completed
-                                          ? TextDecoration.lineThrough
-                                          : null,
-                                      color: completed
-                                          ? Colors.grey
-                                          : Colors.black87,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    task.dueDate == null
-                                        ? task.category
-                                        : '${task.category} • ${DateFormat('MMM d, h:mm a').format(task.dueDate!)}',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Text(
-                              task.priority,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: primaryColor,
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: 'Delete task',
-                              onPressed: () => _deleteTask(task),
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                color: Colors.redAccent,
-                                size: 20,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                ],
-              ),
-      ),
-
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
-        onPressed: _addTask,
-        child: const Icon(Icons.add),
-      ),
-
+      body: IndexedStack(index: selectedIndex, children: pages),
+      floatingActionButton: selectedIndex == 0
+          ? FloatingActionButton(
+              backgroundColor: taskFlowPrimary,
+              foregroundColor: Colors.white,
+              onPressed: _addTask,
+              child: const Icon(Icons.add),
+            )
+          : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedIndex,
         onDestinationSelected: (index) {
-          setState(() {
-            selectedIndex = index;
-          });
+          setState(() => selectedIndex = index);
         },
         destinations: const [
           NavigationDestination(
@@ -319,14 +149,17 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           NavigationDestination(
             icon: Icon(Icons.checklist_outlined),
+            selectedIcon: Icon(Icons.checklist),
             label: 'Tasks',
           ),
           NavigationDestination(
             icon: Icon(Icons.calendar_month_outlined),
+            selectedIcon: Icon(Icons.calendar_month),
             label: 'Calendar',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
             label: 'Settings',
           ),
         ],
@@ -335,7 +168,283 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// Add Task Dialog
+class _HomeDashboard extends StatelessWidget {
+  final Future<void> Function() onAddTask;
+  final Future<void> Function(Task task, bool? value) onToggleTask;
+  final Future<void> Function(Task task) onDeleteTask;
+  final VoidCallback onViewAllTasks;
+
+  const _HomeDashboard({
+    required this.onAddTask,
+    required this.onToggleTask,
+    required this.onDeleteTask,
+    required this.onViewAllTasks,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<TaskProvider>();
+    final tasks = provider.tasks;
+    final completed = tasks.where((task) => task.isCompleted).length;
+    final progress = tasks.isEmpty ? 0.0 : completed / tasks.length;
+
+    return SafeArea(
+      child: provider.isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                const Text(
+                  'Hello, Welcome Back!',
+                  style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Here is your productivity overview.',
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 25),
+                Container(
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    color: taskFlowPrimary,
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Today's Progress",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              '$completed of ${tasks.length} tasks completed',
+                              style: const TextStyle(color: Colors.white70),
+                            ),
+                          ],
+                        ),
+                      ),
+                      SizedBox(
+                        width: 65,
+                        height: 65,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            CircularProgressIndicator(
+                              value: progress,
+                              backgroundColor: Colors.white24,
+                              valueColor: const AlwaysStoppedAnimation(
+                                Colors.white,
+                              ),
+                              strokeWidth: 7,
+                            ),
+                            Center(
+                              child: Text(
+                                '${(progress * 100).round()}%',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 28),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Your Tasks',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: onViewAllTasks,
+                      child: const Text('View all'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                if (tasks.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 40,
+                      horizontal: 20,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.task_alt,
+                          size: 55,
+                          color: Colors.grey.shade400,
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'No tasks yet!',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Create your first task to get started.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed: onAddTask,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Create a task'),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  ...tasks.take(5).map((task) {
+                    final isCompleted = task.isCompleted;
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        children: [
+                          Checkbox(
+                            value: isCompleted,
+                            activeColor: taskFlowPrimary,
+                            onChanged: (value) => onToggleTask(task, value),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  task.title,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    decoration: isCompleted
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                    color: isCompleted
+                                        ? Colors.grey
+                                        : Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  task.dueDate == null
+                                      ? task.category
+                                      : '${task.category} • '
+                                            '${DateFormat('MMM d, h:mm a').format(task.dueDate!)}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            task.priority,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: taskFlowPrimary,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Delete task',
+                            onPressed: () => onDeleteTask(task),
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.redAccent,
+                              size: 20,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                if (tasks.length > 5)
+                  TextButton(
+                    onPressed: onViewAllTasks,
+                    child: Text('View all ${tasks.length} tasks'),
+                  ),
+              ],
+            ),
+    );
+  }
+}
+
+class _ComingSoonScreen extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String description;
+
+  const _ComingSoonScreen({
+    required this.icon,
+    required this.title,
+    required this.description,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                color: taskFlowPrimary.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 48, color: taskFlowPrimary),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              description,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class AddTaskDialog extends StatefulWidget {
   const AddTaskDialog({super.key});
 
@@ -345,7 +454,6 @@ class AddTaskDialog extends StatefulWidget {
 
 class _AddTaskDialogState extends State<AddTaskDialog> {
   final _formKey = GlobalKey<FormState>();
-
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
 
@@ -432,9 +540,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                   return null;
                 },
               ),
-
               const SizedBox(height: 15),
-
               TextFormField(
                 controller: _descriptionController,
                 maxLines: 3,
@@ -444,60 +550,45 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                   border: OutlineInputBorder(),
                 ),
               ),
-
               const SizedBox(height: 15),
-
               DropdownButtonFormField<String>(
                 initialValue: category,
                 decoration: const InputDecoration(
                   labelText: 'Category',
                   border: OutlineInputBorder(),
                 ),
-                items: const [
-                  'Study',
-                  'Work',
-                  'Personal',
-                  'Other',
-                ].map((value) {
-                  return DropdownMenuItem(
-                    value: value,
-                    child: Text(value),
-                  );
-                }).toList(),
+                items: const ['Study', 'Work', 'Personal', 'Other']
+                    .map(
+                      (value) =>
+                          DropdownMenuItem(value: value, child: Text(value)),
+                    )
+                    .toList(),
                 onChanged: (value) {
                   if (value != null) {
                     setState(() => category = value);
                   }
                 },
               ),
-
               const SizedBox(height: 15),
-
               DropdownButtonFormField<String>(
                 initialValue: priority,
                 decoration: const InputDecoration(
                   labelText: 'Priority',
                   border: OutlineInputBorder(),
                 ),
-                items: const [
-                  'Low',
-                  'Medium',
-                  'High',
-                ].map((value) {
-                  return DropdownMenuItem(
-                    value: value,
-                    child: Text(value),
-                  );
-                }).toList(),
+                items: const ['Low', 'Medium', 'High']
+                    .map(
+                      (value) =>
+                          DropdownMenuItem(value: value, child: Text(value)),
+                    )
+                    .toList(),
                 onChanged: (value) {
                   if (value != null) {
                     setState(() => priority = value);
                   }
                 },
               ),
-
               const SizedBox(height: 15),
-
               OutlinedButton.icon(
                 onPressed: _selectDate,
                 icon: const Icon(Icons.calendar_month),
@@ -519,7 +610,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         FilledButton(
           onPressed: _saveTask,
           style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF6855E8),
+            backgroundColor: taskFlowPrimary,
             foregroundColor: Colors.white,
           ),
           child: const Text('Save Task'),
