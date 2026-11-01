@@ -7,19 +7,13 @@ class TaskRepository {
   Future<int> addTask(Task task) async {
     final db = await _databaseHelper.database;
 
-    return await db.insert(
-      'tasks',
-      task.toMap()..remove('id'),
-    );
+    return await db.insert('tasks', task.toMap()..remove('id'));
   }
 
   Future<List<Task>> getAllTasks() async {
     final db = await _databaseHelper.database;
 
-    final result = await db.query(
-      'tasks',
-      orderBy: 'createdAt DESC',
-    );
+    final result = await db.query('tasks', orderBy: 'createdAt DESC');
 
     return result.map((map) => Task.fromMap(map)).toList();
   }
@@ -38,10 +32,6 @@ class TaskRepository {
   Future<int> deleteTask(int id) async {
     final db = await _databaseHelper.database;
 
-    return await db.delete(
-      'tasks',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    return await db.delete('tasks', where: 'id = ?', whereArgs: [id]);
   }
 }

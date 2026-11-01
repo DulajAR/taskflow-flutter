@@ -8,6 +8,10 @@ class Task {
   final bool isCompleted;
   final DateTime createdAt;
 
+  // 0 = at due time, 10 = 10 minutes before,
+  // 30 = 30 minutes before, -1 = no reminder.
+  final int reminderMinutes;
+
   const Task({
     this.id,
     required this.title,
@@ -17,6 +21,7 @@ class Task {
     this.dueDate,
     this.isCompleted = false,
     required this.createdAt,
+    this.reminderMinutes = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -29,6 +34,7 @@ class Task {
       'dueDate': dueDate?.toIso8601String(),
       'isCompleted': isCompleted ? 1 : 0,
       'createdAt': createdAt.toIso8601String(),
+      'reminderMinutes': reminderMinutes,
     };
   }
 
@@ -44,6 +50,7 @@ class Task {
           : null,
       isCompleted: map['isCompleted'] == 1,
       createdAt: DateTime.parse(map['createdAt'] as String),
+      reminderMinutes: (map['reminderMinutes'] as int?) ?? 0,
     );
   }
 }

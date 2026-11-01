@@ -4,7 +4,11 @@ import 'package:intl/intl.dart';
 
 import '../models/task.dart';
 import '../providers/task_provider.dart';
+import '../services/notification_service.dart';
+import '../widgets/task_dialog.dart';
 import 'tasks_screen.dart';
+import 'calendar_screen.dart';
+import 'settings_screen.dart';
 
 const Color taskFlowPrimary = Color(0xFF6855E8);
 const Color taskFlowBackground = Color(0xFFF7F8FC);
@@ -19,10 +23,11 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int selectedIndex = 0;
 
+  // CREATE TASK
   Future<void> _addTask() async {
     final task = await showDialog<Task>(
       context: context,
-      builder: (_) => const AddTaskDialog(),
+      builder: (_) => const TaskDialog(),
     );
 
     if (task == null || !mounted) return;
@@ -36,6 +41,25 @@ class _HomeScreenState extends State<HomeScreen> {
     ).showSnackBar(const SnackBar(content: Text('Task added successfully!')));
   }
 
+  // EDIT TASK
+  Future<void> _editTask(Task task) async {
+    final updatedTask = await showDialog<Task>(
+      context: context,
+      builder: (_) => TaskDialog(task: task),
+    );
+
+    if (updatedTask == null || !mounted) return;
+
+    await context.read<TaskProvider>().updateTask(updatedTask);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Task updated successfully!')));
+  }
+
+  // COMPLETE / UNCOMPLETE TASK
   Future<void> _toggleTask(Task task, bool? value) async {
     if (task.id == null) return;
 
@@ -48,13 +72,39 @@ class _HomeScreenState extends State<HomeScreen> {
       dueDate: task.dueDate,
       isCompleted: value ?? false,
       createdAt: task.createdAt,
+      reminderMinutes: task.reminderMinutes,
     );
 
     await context.read<TaskProvider>().updateTask(updatedTask);
   }
 
+  // DELETE TASK
   Future<void> _deleteTask(Task task) async {
     if (task.id == null) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete task?'),
+        content: Text('Delete "${task.title}" permanently?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
 
     await context.read<TaskProvider>().deleteTask(task.id!);
 
@@ -63,6 +113,24 @@ class _HomeScreenState extends State<HomeScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Task deleted successfully!')));
+  }
+
+  // TEST NOTIFICATION
+  Future<void> _testNotification() async {
+    try {
+      await NotificationService.showTestNotification();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Test notification sent!')));
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Notification error: $error')));
+    }
   }
 
   String get _pageTitle {
@@ -83,6 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final pages = <Widget>[
       _HomeDashboard(
         onAddTask: _addTask,
+        onEditTask: _editTask,
         onToggleTask: _toggleTask,
         onDeleteTask: _deleteTask,
         onViewAllTasks: () {
@@ -90,23 +159,17 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
       const TasksScreen(),
-      const _ComingSoonScreen(
-        icon: Icons.calendar_month_outlined,
-        title: 'Your Calendar',
-        description: 'Your calendar view will be available in the next update.',
-      ),
-      const _ComingSoonScreen(
-        icon: Icons.settings_outlined,
-        title: 'Settings',
-        description:
-            'App preferences and appearance settings will be available here.',
-      ),
+      const CalendarScreen(),
+      const SettingsScreen(),
     ];
 
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: taskFlowBackground,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: taskFlowBackground,
+        backgroundColor: theme.scaffoldBackgroundColor,
+        elevation: 0,
         title: Text(
           _pageTitle,
           style: const TextStyle(fontWeight: FontWeight.bold),
@@ -114,14 +177,8 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           if (selectedIndex == 0)
             IconButton(
-              tooltip: 'Notifications',
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Reminder notifications are coming soon.'),
-                  ),
-                );
-              },
+              tooltip: 'Test notifications',
+              onPressed: _testNotification,
               icon: const Icon(Icons.notifications_outlined),
             ),
           const SizedBox(width: 8),
@@ -133,6 +190,7 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: taskFlowPrimary,
               foregroundColor: Colors.white,
               onPressed: _addTask,
+              tooltip: 'Add task',
               child: const Icon(Icons.add),
             )
           : null,
@@ -168,14 +226,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+// =====================================================
+// HOME DASHBOARD
+// =====================================================
+
 class _HomeDashboard extends StatelessWidget {
   final Future<void> Function() onAddTask;
+  final Future<void> Function(Task task) onEditTask;
   final Future<void> Function(Task task, bool? value) onToggleTask;
   final Future<void> Function(Task task) onDeleteTask;
   final VoidCallback onViewAllTasks;
 
   const _HomeDashboard({
     required this.onAddTask,
+    required this.onEditTask,
     required this.onToggleTask,
     required this.onDeleteTask,
     required this.onViewAllTasks,
@@ -184,9 +248,13 @@ class _HomeDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TaskProvider>();
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final tasks = provider.tasks;
     final completed = tasks.where((task) => task.isCompleted).length;
     final progress = tasks.isEmpty ? 0.0 : completed / tasks.length;
+    final pending = tasks.length - completed;
 
     return SafeArea(
       child: provider.isLoading
@@ -201,9 +269,11 @@ class _HomeDashboard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   'Here is your productivity overview.',
-                  style: TextStyle(color: Colors.grey.shade600),
+                  style: TextStyle(color: colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 25),
+
+                // PROGRESS CARD
                 Container(
                   padding: const EdgeInsets.all(22),
                   decoration: BoxDecoration(
@@ -228,6 +298,14 @@ class _HomeDashboard extends StatelessWidget {
                             Text(
                               '$completed of ${tasks.length} tasks completed',
                               style: const TextStyle(color: Colors.white70),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              '$pending tasks remaining',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
@@ -261,7 +339,10 @@ class _HomeDashboard extends StatelessWidget {
                     ],
                   ),
                 ),
+
                 const SizedBox(height: 28),
+
+                // TASK HEADING
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -278,7 +359,10 @@ class _HomeDashboard extends StatelessWidget {
                     ),
                   ],
                 ),
+
                 const SizedBox(height: 10),
+
+                // EMPTY STATE
                 if (tasks.isEmpty)
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -286,7 +370,7 @@ class _HomeDashboard extends StatelessWidget {
                       horizontal: 20,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: colorScheme.surface,
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Column(
@@ -294,7 +378,7 @@ class _HomeDashboard extends StatelessWidget {
                         Icon(
                           Icons.task_alt,
                           size: 55,
-                          color: Colors.grey.shade400,
+                          color: colorScheme.onSurfaceVariant,
                         ),
                         const SizedBox(height: 12),
                         const Text(
@@ -308,7 +392,7 @@ class _HomeDashboard extends StatelessWidget {
                         Text(
                           'Create your first task to get started.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey.shade600),
+                          style: TextStyle(color: colorScheme.onSurfaceVariant),
                         ),
                         const SizedBox(height: 12),
                         FilledButton.icon(
@@ -327,7 +411,7 @@ class _HomeDashboard extends StatelessWidget {
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: colorScheme.surface,
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Row(
@@ -335,7 +419,9 @@ class _HomeDashboard extends StatelessWidget {
                           Checkbox(
                             value: isCompleted,
                             activeColor: taskFlowPrimary,
-                            onChanged: (value) => onToggleTask(task, value),
+                            onChanged: (value) {
+                              onToggleTask(task, value);
+                            },
                           ),
                           const SizedBox(width: 6),
                           Expanded(
@@ -350,8 +436,8 @@ class _HomeDashboard extends StatelessWidget {
                                         ? TextDecoration.lineThrough
                                         : null,
                                     color: isCompleted
-                                        ? Colors.grey
-                                        : Colors.black87,
+                                        ? colorScheme.onSurfaceVariant
+                                        : colorScheme.onSurface,
                                   ),
                                 ),
                                 const SizedBox(height: 6),
@@ -362,7 +448,7 @@ class _HomeDashboard extends StatelessWidget {
                                             '${DateFormat('MMM d, h:mm a').format(task.dueDate!)}',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: Colors.grey.shade600,
+                                    color: colorScheme.onSurfaceVariant,
                                   ),
                                 ),
                               ],
@@ -374,6 +460,15 @@ class _HomeDashboard extends StatelessWidget {
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                               color: taskFlowPrimary,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Edit task',
+                            onPressed: () => onEditTask(task),
+                            icon: const Icon(
+                              Icons.edit_outlined,
+                              color: taskFlowPrimary,
+                              size: 20,
                             ),
                           ),
                           IconButton(
@@ -389,6 +484,7 @@ class _HomeDashboard extends StatelessWidget {
                       ),
                     );
                   }),
+
                 if (tasks.length > 5)
                   TextButton(
                     onPressed: onViewAllTasks,
@@ -396,226 +492,6 @@ class _HomeDashboard extends StatelessWidget {
                   ),
               ],
             ),
-    );
-  }
-}
-
-class _ComingSoonScreen extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String description;
-
-  const _ComingSoonScreen({
-    required this.icon,
-    required this.title,
-    required this.description,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: taskFlowPrimary.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 48, color: taskFlowPrimary),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              title,
-              style: const TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              description,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade600),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class AddTaskDialog extends StatefulWidget {
-  const AddTaskDialog({super.key});
-
-  @override
-  State<AddTaskDialog> createState() => _AddTaskDialogState();
-}
-
-class _AddTaskDialogState extends State<AddTaskDialog> {
-  final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _descriptionController = TextEditingController();
-
-  String category = 'Personal';
-  String priority = 'Medium';
-  DateTime? dueDate;
-
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _descriptionController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _selectDate() async {
-    final selectedDate = await showDatePicker(
-      context: context,
-      initialDate: dueDate ?? DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime(2100),
-    );
-
-    if (selectedDate == null || !mounted) return;
-
-    final selectedTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-    );
-
-    if (selectedTime == null || !mounted) return;
-
-    setState(() {
-      dueDate = DateTime(
-        selectedDate.year,
-        selectedDate.month,
-        selectedDate.day,
-        selectedTime.hour,
-        selectedTime.minute,
-      );
-    });
-  }
-
-  void _saveTask() {
-    if (!_formKey.currentState!.validate()) return;
-
-    final task = Task(
-      title: _titleController.text.trim(),
-      description: _descriptionController.text.trim(),
-      category: category,
-      priority: priority,
-      dueDate: dueDate,
-      isCompleted: false,
-      createdAt: DateTime.now(),
-    );
-
-    Navigator.pop(context, task);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text(
-        'Create New Task',
-        style: TextStyle(fontWeight: FontWeight.bold),
-      ),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Task title',
-                  hintText: 'Enter task name',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.task_alt),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter a task title';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 15),
-              TextFormField(
-                controller: _descriptionController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  hintText: 'Enter task details (optional)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 15),
-              DropdownButtonFormField<String>(
-                initialValue: category,
-                decoration: const InputDecoration(
-                  labelText: 'Category',
-                  border: OutlineInputBorder(),
-                ),
-                items: const ['Study', 'Work', 'Personal', 'Other']
-                    .map(
-                      (value) =>
-                          DropdownMenuItem(value: value, child: Text(value)),
-                    )
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => category = value);
-                  }
-                },
-              ),
-              const SizedBox(height: 15),
-              DropdownButtonFormField<String>(
-                initialValue: priority,
-                decoration: const InputDecoration(
-                  labelText: 'Priority',
-                  border: OutlineInputBorder(),
-                ),
-                items: const ['Low', 'Medium', 'High']
-                    .map(
-                      (value) =>
-                          DropdownMenuItem(value: value, child: Text(value)),
-                    )
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => priority = value);
-                  }
-                },
-              ),
-              const SizedBox(height: 15),
-              OutlinedButton.icon(
-                onPressed: _selectDate,
-                icon: const Icon(Icons.calendar_month),
-                label: Text(
-                  dueDate == null
-                      ? 'Select due date and time'
-                      : DateFormat('MMM d, yyyy - h:mm a').format(dueDate!),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _saveTask,
-          style: FilledButton.styleFrom(
-            backgroundColor: taskFlowPrimary,
-            foregroundColor: Colors.white,
-          ),
-          child: const Text('Save Task'),
-        ),
-      ],
     );
   }
 }

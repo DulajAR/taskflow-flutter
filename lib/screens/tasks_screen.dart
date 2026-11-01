@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../models/task.dart';
 import '../providers/task_provider.dart';
+import '../widgets/task_dialog.dart';
 import 'home_screen.dart' show taskFlowPrimary;
 
 class TasksScreen extends StatefulWidget {
@@ -16,43 +17,13 @@ class TasksScreen extends StatefulWidget {
 class _TasksScreenState extends State<TasksScreen> {
   final TextEditingController _searchController = TextEditingController();
 
-  String _statusFilter = 'All';
-  String _priorityFilter = 'All';
-  String _categoryFilter = 'All';
-
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
 
-  List<Task> _filterTasks(List<Task> tasks) {
-    final query = _searchController.text.trim().toLowerCase();
-
-    return tasks.where((task) {
-      final matchesSearch =
-          task.title.toLowerCase().contains(query) ||
-          task.description.toLowerCase().contains(query);
-
-      final matchesStatus = switch (_statusFilter) {
-        'Active' => !task.isCompleted,
-        'Completed' => task.isCompleted,
-        _ => true,
-      };
-
-      final matchesPriority =
-          _priorityFilter == 'All' || task.priority == _priorityFilter;
-
-      final matchesCategory =
-          _categoryFilter == 'All' || task.category == _categoryFilter;
-
-      return matchesSearch &&
-          matchesStatus &&
-          matchesPriority &&
-          matchesCategory;
-    }).toList();
-  }
-
+  // Toggle task completion
   Future<void> _toggleTask(Task task, bool? checked) async {
     if (task.id == null) return;
 
@@ -65,11 +36,31 @@ class _TasksScreenState extends State<TasksScreen> {
       dueDate: task.dueDate,
       isCompleted: checked ?? false,
       createdAt: task.createdAt,
+      reminderMinutes: task.reminderMinutes,
     );
 
     await context.read<TaskProvider>().updateTask(updatedTask);
   }
 
+  // Edit task
+  Future<void> _editTask(Task task) async {
+    final updatedTask = await showDialog<Task>(
+      context: context,
+      builder: (_) => TaskDialog(task: task),
+    );
+
+    if (updatedTask == null || !mounted) return;
+
+    await context.read<TaskProvider>().updateTask(updatedTask);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Task updated successfully!')));
+  }
+
+  // Delete task
   Future<void> _deleteTask(Task task) async {
     if (task.id == null) return;
 
@@ -102,10 +93,16 @@ class _TasksScreenState extends State<TasksScreen> {
         .showSnackBar(const SnackBar(content: Text('Task deleted')));
   }
 
+  // Clear search and filters
+  void _clearFilters(TaskProvider provider) {
+    _searchController.clear();
+    provider.clearFilters();
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TaskProvider>();
-    final tasks = _filterTasks(provider.tasks);
+    final tasks = provider.filteredTasks;
 
     if (provider.isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -113,11 +110,12 @@ class _TasksScreenState extends State<TasksScreen> {
 
     return Column(
       children: [
+        // Search bar
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: TextField(
             controller: _searchController,
-            onChanged: (_) => setState(() {}),
+            onChanged: provider.setSearchQuery,
             decoration: InputDecoration(
               hintText: 'Search tasks...',
               prefixIcon: const Icon(Icons.search),
@@ -126,12 +124,12 @@ class _TasksScreenState extends State<TasksScreen> {
                   : IconButton(
                       onPressed: () {
                         _searchController.clear();
-                        setState(() {});
+                        provider.setSearchQuery('');
                       },
                       icon: const Icon(Icons.clear),
                     ),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: Theme.of(context).colorScheme.surface,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: BorderSide.none,
@@ -139,33 +137,37 @@ class _TasksScreenState extends State<TasksScreen> {
             ),
           ),
         ),
+
+        // Status filters
         SizedBox(
           height: 48,
           child: ListView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            children: ['All', 'Active', 'Completed'].map((status) {
+            children: ['All', 'Pending', 'Completed'].map((status) {
               return Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
                   label: Text(status),
-                  selected: _statusFilter == status,
+                  selected: provider.statusFilter == status,
                   selectedColor: taskFlowPrimary.withValues(alpha: 0.15),
                   onSelected: (_) {
-                    setState(() => _statusFilter = status);
+                    provider.setStatusFilter(status);
                   },
                 ),
               );
             }).toList(),
           ),
         ),
+
+        // Category and priority filters
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: Row(
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue: _priorityFilter,
+                  initialValue: provider.priorityFilter,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Priority',
@@ -183,7 +185,7 @@ class _TasksScreenState extends State<TasksScreen> {
                       .toList(),
                   onChanged: (value) {
                     if (value != null) {
-                      setState(() => _priorityFilter = value);
+                      provider.setPriorityFilter(value);
                     }
                   },
                 ),
@@ -191,7 +193,7 @@ class _TasksScreenState extends State<TasksScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue: _categoryFilter,
+                  initialValue: provider.categoryFilter,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Category',
@@ -209,7 +211,7 @@ class _TasksScreenState extends State<TasksScreen> {
                       .toList(),
                   onChanged: (value) {
                     if (value != null) {
-                      setState(() => _categoryFilter = value);
+                      provider.setCategoryFilter(value);
                     }
                   },
                 ),
@@ -217,16 +219,86 @@ class _TasksScreenState extends State<TasksScreen> {
             ],
           ),
         ),
+
+        // Sorting and clear filters
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              '${tasks.length} task${tasks.length == 1 ? '' : 's'} found',
-              style: TextStyle(color: Colors.grey.shade700),
-            ),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: provider.sortOption,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Sort by',
+                    prefixIcon: Icon(Icons.sort),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                    border: OutlineInputBorder(),
+                  ),
+                  items:
+                      [
+                        'Newest',
+                        'Oldest',
+                        'Due Date',
+                        'Alphabetical',
+                        'Priority',
+                      ].map((value) {
+                        return DropdownMenuItem(
+                          value: value,
+                          child: Text(value),
+                        );
+                      }).toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      provider.setSortOption(value);
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                onPressed: provider.hasActiveFilters
+                    ? () => _clearFilters(provider)
+                    : null,
+                icon: const Icon(Icons.filter_alt_off),
+                label: const Text('Clear'),
+              ),
+            ],
           ),
         ),
+
+        // Result count
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${tasks.length} of ${provider.totalTasks} '
+                  'task${provider.totalTasks == 1 ? '' : 's'}',
+                  style: TextStyle(
+                    color: Colors.grey.shade700,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              if (provider.hasActiveFilters)
+                Text(
+                  'Filters active',
+                  style: const TextStyle(
+                    color: taskFlowPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+            ],
+          ),
+        ),
+
+        // Task list
         Expanded(
           child: tasks.isEmpty
               ? Center(
@@ -236,7 +308,7 @@ class _TasksScreenState extends State<TasksScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          Icons.checklist_rounded,
+                          Icons.search_off_rounded,
                           size: 64,
                           color: Colors.grey.shade400,
                         ),
@@ -250,10 +322,20 @@ class _TasksScreenState extends State<TasksScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Try changing your search or filters.',
+                          provider.totalTasks == 0
+                              ? 'You have not added any tasks yet.'
+                              : 'Try changing your search or filters.',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.grey.shade600),
                         ),
+                        if (provider.hasActiveFilters) ...[
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: () => _clearFilters(provider),
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Clear filters'),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -267,7 +349,7 @@ class _TasksScreenState extends State<TasksScreen> {
                     return Card(
                       margin: const EdgeInsets.only(bottom: 10),
                       elevation: 0,
-                      color: Colors.white,
+                      color: Theme.of(context).colorScheme.surface,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                         side: BorderSide(color: Colors.grey.shade200),
@@ -282,7 +364,9 @@ class _TasksScreenState extends State<TasksScreen> {
                             Checkbox(
                               value: task.isCompleted,
                               activeColor: taskFlowPrimary,
-                              onChanged: (value) => _toggleTask(task, value),
+                              onChanged: (value) {
+                                _toggleTask(task, value);
+                              },
                             ),
                             Expanded(
                               child: Column(
@@ -297,7 +381,9 @@ class _TasksScreenState extends State<TasksScreen> {
                                           : null,
                                       color: task.isCompleted
                                           ? Colors.grey
-                                          : Colors.black87,
+                                          : Theme.of(context)
+                                                .colorScheme
+                                                .onSurface,
                                     ),
                                   ),
                                   if (task.description.isNotEmpty) ...[
@@ -324,6 +410,18 @@ class _TasksScreenState extends State<TasksScreen> {
                                 ],
                               ),
                             ),
+
+                            // Edit button
+                            IconButton(
+                              tooltip: 'Edit task',
+                              onPressed: () => _editTask(task),
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                                color: taskFlowPrimary,
+                              ),
+                            ),
+
+                            // Delete button
                             IconButton(
                               tooltip: 'Delete task',
                               onPressed: () => _deleteTask(task),
