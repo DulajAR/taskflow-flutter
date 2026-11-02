@@ -4,13 +4,20 @@ import 'package:intl/intl.dart';
 
 import '../models/task.dart';
 import '../providers/task_provider.dart';
-import '../services/notification_service.dart';
 import '../widgets/task_dialog.dart';
+import '../widgets/taskflow_hero_banner.dart';
+import '../services/notification_service.dart';
+
 import 'tasks_screen.dart';
 import 'calendar_screen.dart';
 import 'settings_screen.dart';
 
+// ======================================================
+// TASKFLOW BRAND COLORS
+// ======================================================
+
 const Color taskFlowPrimary = Color(0xFF6855E8);
+const Color taskFlowSecondary = Color(0xFF9B8CFF);
 const Color taskFlowBackground = Color(0xFFF7F8FC);
 
 class HomeScreen extends StatefulWidget {
@@ -23,7 +30,10 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int selectedIndex = 0;
 
-  // CREATE TASK
+  // ======================================================
+  // ADD TASK
+  // ======================================================
+
   Future<void> _addTask() async {
     final task = await showDialog<Task>(
       context: context,
@@ -36,12 +46,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!mounted) return;
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Task added successfully!')));
+    _showMessage('Task created successfully!');
   }
 
+  // ======================================================
   // EDIT TASK
+  // ======================================================
+
   Future<void> _editTask(Task task) async {
     final updatedTask = await showDialog<Task>(
       context: context,
@@ -54,13 +65,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!mounted) return;
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Task updated successfully!')));
+    _showMessage('Task updated successfully!');
   }
 
+  // ======================================================
   // COMPLETE / UNCOMPLETE TASK
-  Future<void> _toggleTask(Task task, bool? value) async {
+  // ======================================================
+
+  Future<void> _toggleTask(Task task, bool? checked) async {
     if (task.id == null) return;
 
     final updatedTask = Task(
@@ -70,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
       category: task.category,
       priority: task.priority,
       dueDate: task.dueDate,
-      isCompleted: value ?? false,
+      isCompleted: checked ?? false,
       createdAt: task.createdAt,
       reminderMinutes: task.reminderMinutes,
     );
@@ -78,84 +90,85 @@ class _HomeScreenState extends State<HomeScreen> {
     await context.read<TaskProvider>().updateTask(updatedTask);
   }
 
+  // ======================================================
   // DELETE TASK
+  // ======================================================
+
   Future<void> _deleteTask(Task task) async {
     if (task.id == null) return;
 
-    final confirm = await showDialog<bool>(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Delete task?'),
-        content: Text('Delete "${task.title}" permanently?'),
+        content: Text('Are you sure you want to delete "${task.title}"?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
+            onPressed: () {
+              Navigator.pop(dialogContext, false);
+            },
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
             style: FilledButton.styleFrom(
-              backgroundColor: Colors.red,
+              backgroundColor: Colors.redAccent,
               foregroundColor: Colors.white,
             ),
+            onPressed: () {
+              Navigator.pop(dialogContext, true);
+            },
             child: const Text('Delete'),
           ),
         ],
       ),
     );
 
-    if (confirm != true || !mounted) return;
+    if (confirmed != true || !mounted) return;
 
     await context.read<TaskProvider>().deleteTask(task.id!);
 
     if (!mounted) return;
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Task deleted successfully!')));
+    _showMessage('Task deleted successfully!');
   }
 
+  // ======================================================
   // TEST NOTIFICATION
+  // ======================================================
+
   Future<void> _testNotification() async {
-    try {
-      await NotificationService.showTestNotification();
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Test notification sent!')));
-    } catch (error) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Notification error: $error')));
-    }
+    await NotificationService.showTestNotification();
   }
 
-  String get _pageTitle {
-    switch (selectedIndex) {
-      case 1:
-        return 'My Tasks';
-      case 2:
-        return 'Calendar';
-      case 3:
-        return 'Settings';
-      default:
-        return 'TaskFlow';
-    }
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
   }
+
+  // ======================================================
+  // MAIN SCREEN
+  // ======================================================
 
   @override
   Widget build(BuildContext context) {
-    final pages = <Widget>[
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    final pages = [
       _HomeDashboard(
-        onAddTask: _addTask,
-        onEditTask: _editTask,
-        onToggleTask: _toggleTask,
-        onDeleteTask: _deleteTask,
-        onViewAllTasks: () {
-          setState(() => selectedIndex = 1);
+        onEdit: _editTask,
+        onDelete: _deleteTask,
+        onToggle: _toggleTask,
+        onViewAll: () {
+          setState(() {
+            selectedIndex = 1;
+          });
         },
       ),
       const TasksScreen(),
@@ -163,61 +176,120 @@ class _HomeScreenState extends State<HomeScreen> {
       const SettingsScreen(),
     ];
 
-    final theme = Theme.of(context);
+    final titles = ['TaskFlow', 'My Tasks', 'Calendar', 'Settings'];
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: theme.brightness == Brightness.dark
+          ? theme.scaffoldBackgroundColor
+          : taskFlowBackground,
+
+      // ==================================================
+      // APP BAR
+      // ==================================================
       appBar: AppBar(
-        backgroundColor: theme.scaffoldBackgroundColor,
         elevation: 0,
-        title: Text(
-          _pageTitle,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        scrolledUnderElevation: 0,
+        backgroundColor: theme.scaffoldBackgroundColor,
+        surfaceTintColor: Colors.transparent,
+        titleSpacing: 18,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [taskFlowPrimary, taskFlowSecondary],
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.task_alt_rounded,
+                color: Colors.white,
+                size: 23,
+              ),
+            ),
+            const SizedBox(width: 11),
+            Text(
+              titles[selectedIndex],
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 21,
+                letterSpacing: -0.5,
+              ),
+            ),
+          ],
         ),
         actions: [
-          if (selectedIndex == 0)
-            IconButton(
-              tooltip: 'Test notifications',
-              onPressed: _testNotification,
-              icon: const Icon(Icons.notifications_outlined),
-            ),
+          IconButton(
+            tooltip: 'Test notification',
+            onPressed: _testNotification,
+            icon: const Icon(Icons.notifications_outlined),
+          ),
           const SizedBox(width: 8),
         ],
       ),
+
+      // ==================================================
+      // PAGES
+      // ==================================================
       body: IndexedStack(index: selectedIndex, children: pages),
-      floatingActionButton: selectedIndex == 0
-          ? FloatingActionButton(
+
+      // ==================================================
+      // ADD TASK BUTTON
+      // ==================================================
+      floatingActionButton: selectedIndex == 0 || selectedIndex == 1
+          ? FloatingActionButton.extended(
+              heroTag: 'taskflow_add_task',
+              onPressed: _addTask,
               backgroundColor: taskFlowPrimary,
               foregroundColor: Colors.white,
-              onPressed: _addTask,
-              tooltip: 'Add task',
-              child: const Icon(Icons.add),
+              elevation: 4,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text(
+                'New Task',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
             )
           : null,
+
+      // ==================================================
+      // BOTTOM NAVIGATION
+      // ==================================================
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedIndex,
+        backgroundColor: scheme.surface,
+        indicatorColor: taskFlowPrimary.withValues(alpha: 0.14),
+        animationDuration: const Duration(milliseconds: 350),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         onDestinationSelected: (index) {
-          setState(() => selectedIndex = index);
+          setState(() {
+            selectedIndex = index;
+          });
         },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
+            selectedIcon: Icon(Icons.home_rounded, color: taskFlowPrimary),
             label: 'Home',
           ),
           NavigationDestination(
             icon: Icon(Icons.checklist_outlined),
-            selectedIcon: Icon(Icons.checklist),
+            selectedIcon: Icon(Icons.checklist_rounded, color: taskFlowPrimary),
             label: 'Tasks',
           ),
           NavigationDestination(
             icon: Icon(Icons.calendar_month_outlined),
-            selectedIcon: Icon(Icons.calendar_month),
+            selectedIcon: Icon(
+              Icons.calendar_month_rounded,
+              color: taskFlowPrimary,
+            ),
             label: 'Calendar',
           ),
           NavigationDestination(
             icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
+            selectedIcon: Icon(Icons.settings_rounded, color: taskFlowPrimary),
             label: 'Settings',
           ),
         ],
@@ -226,272 +298,673 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// =====================================================
+// ======================================================
 // HOME DASHBOARD
-// =====================================================
+// ======================================================
 
-class _HomeDashboard extends StatelessWidget {
-  final Future<void> Function() onAddTask;
-  final Future<void> Function(Task task) onEditTask;
-  final Future<void> Function(Task task, bool? value) onToggleTask;
-  final Future<void> Function(Task task) onDeleteTask;
-  final VoidCallback onViewAllTasks;
+class _HomeDashboard extends StatefulWidget {
+  final Future<void> Function(Task) onEdit;
+  final Future<void> Function(Task) onDelete;
+  final Future<void> Function(Task, bool?) onToggle;
+  final VoidCallback onViewAll;
 
   const _HomeDashboard({
-    required this.onAddTask,
-    required this.onEditTask,
-    required this.onToggleTask,
-    required this.onDeleteTask,
-    required this.onViewAllTasks,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onToggle,
+    required this.onViewAll,
   });
+
+  @override
+  State<_HomeDashboard> createState() => _HomeDashboardState();
+}
+
+class _HomeDashboardState extends State<_HomeDashboard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _fade;
+  late final Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 650),
+    );
+
+    final animation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+    );
+
+    _fade = animation;
+
+    _slide = Tween<Offset>(
+      begin: const Offset(0, 0.04),
+      end: Offset.zero,
+    ).animate(animation);
+
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<TaskProvider>();
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final scheme = Theme.of(context).colorScheme;
 
     final tasks = provider.tasks;
+
+    final total = tasks.length;
+
     final completed = tasks.where((task) => task.isCompleted).length;
-    final progress = tasks.isEmpty ? 0.0 : completed / tasks.length;
-    final pending = tasks.length - completed;
 
-    return SafeArea(
-      child: provider.isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                const Text(
-                  'Hello, Welcome Back!',
-                  style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Here is your productivity overview.',
-                  style: TextStyle(color: colorScheme.onSurfaceVariant),
-                ),
-                const SizedBox(height: 25),
+    final pending = total - completed;
 
-                // PROGRESS CARD
-                Container(
-                  padding: const EdgeInsets.all(22),
-                  decoration: BoxDecoration(
-                    color: taskFlowPrimary,
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              "Today's Progress",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
+    final progress = total == 0 ? 0.0 : completed / total;
+
+    final recentTasks = List<Task>.from(tasks)
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    final visibleTasks = recentTasks.take(5).toList();
+
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(
+        position: _slide,
+        child: provider.isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : RefreshIndicator(
+                color: taskFlowPrimary,
+                onRefresh: () async {
+                  // Provider updates automatically refresh
+                  // the dashboard through ChangeNotifier.
+                  await Future<void>.delayed(const Duration(milliseconds: 350));
+                },
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 100),
+                  children: [
+                    // ==================================
+                    // WELCOME HEADING
+                    // ==================================
+
+                    Text(
+                      'Make today count ✨',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.6,
+                          ),
+                    ),
+
+                    const SizedBox(height: 6),
+
+                    Text(
+                      DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now()),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    Text(
+                      'A little progress every day adds up.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+
+                    // ==================================
+                    // DULTRIX HERO IMAGE
+                    // ==================================
+                    const SizedBox(height: 20),
+
+                    const TaskFlowHeroBanner(),
+
+                    const SizedBox(height: 25),
+
+                    // ==================================
+                    // PROGRESS SECTION
+                    // ==================================
+                    _ProgressCard(
+                      total: total,
+                      completed: completed,
+                      progress: progress,
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // ==================================
+                    // SUMMARY CARDS
+                    // ==================================
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _SummaryCard(
+                            label: 'Completed',
+                            value: completed,
+                            icon: Icons.task_alt_rounded,
+                            color: const Color(0xFF10B981),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _SummaryCard(
+                            label: 'Pending',
+                            value: pending,
+                            icon: Icons.schedule_rounded,
+                            color: const Color(0xFFF59E0B),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    // ==================================
+                    // RECENT TASKS HEADING
+                    // ==================================
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Recent Tasks',
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: widget.onViewAll,
+                          child: const Text(
+                            'View All',
+                            style: TextStyle(
+                              color: taskFlowPrimary,
+                              fontWeight: FontWeight.w700,
                             ),
-                            const SizedBox(height: 12),
-                            Text(
-                              '$completed of ${tasks.length} tasks completed',
-                              style: const TextStyle(color: Colors.white70),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              '$pending tasks remaining',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    // ==================================
+                    // RECENT TASKS LIST
+                    // ==================================
+                    if (visibleTasks.isEmpty)
+                      const _EmptyTaskCard()
+                    else
+                      ...visibleTasks.map(
+                        (task) => _AnimatedTaskCard(
+                          key: ValueKey(task.id ?? task.createdAt),
+                          task: task,
+                          onToggle: (value) => widget.onToggle(task, value),
+                          onEdit: () => widget.onEdit(task),
+                          onDelete: () => widget.onDelete(task),
                         ),
                       ),
-                      SizedBox(
-                        width: 65,
-                        height: 65,
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            CircularProgressIndicator(
-                              value: progress,
-                              backgroundColor: Colors.white24,
-                              valueColor: const AlwaysStoppedAnimation(
-                                Colors.white,
-                              ),
-                              strokeWidth: 7,
-                            ),
-                            Center(
-                              child: Text(
-                                '${(progress * 100).round()}%',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
+
+                    if (total > 5) ...[
+                      const SizedBox(height: 8),
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: widget.onViewAll,
+                          icon: const Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 18,
+                          ),
+                          label: Text('View all $total tasks'),
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
+              ),
+      ),
+    );
+  }
+}
 
-                const SizedBox(height: 28),
+// ======================================================
+// PROGRESS CARD
+// ======================================================
 
-                // TASK HEADING
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+class _ProgressCard extends StatelessWidget {
+  final int total;
+  final int completed;
+  final double progress;
+
+  const _ProgressCard({
+    required this.total,
+    required this.completed,
+    required this.progress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF6855E8), Color(0xFF806DF5), Color(0xFF9B8CFF)],
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: taskFlowPrimary.withValues(alpha: 0.2),
+            blurRadius: 22,
+            offset: const Offset(0, 9),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
                   children: [
-                    const Text(
-                      'Your Tasks',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Icon(
+                      Icons.insights_rounded,
+                      color: Colors.white70,
+                      size: 20,
                     ),
-                    TextButton(
-                      onPressed: onViewAllTasks,
-                      child: const Text('View all'),
+                    SizedBox(width: 8),
+                    Text(
+                      "Today's Progress",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ],
                 ),
 
-                const SizedBox(height: 10),
+                const SizedBox(height: 14),
 
-                // EMPTY STATE
-                if (tasks.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 40,
-                      horizontal: 20,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colorScheme.surface,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.task_alt,
-                          size: 55,
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'No tasks yet!',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Create your first task to get started.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: colorScheme.onSurfaceVariant),
-                        ),
-                        const SizedBox(height: 12),
-                        FilledButton.icon(
-                          onPressed: onAddTask,
-                          icon: const Icon(Icons.add),
-                          label: const Text('Create a task'),
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  ...tasks.take(5).map((task) {
-                    final isCompleted = task.isCompleted;
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        children: [
-                          Checkbox(
-                            value: isCompleted,
-                            activeColor: taskFlowPrimary,
-                            onChanged: (value) {
-                              onToggleTask(task, value);
-                            },
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  task.title,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    decoration: isCompleted
-                                        ? TextDecoration.lineThrough
-                                        : null,
-                                    color: isCompleted
-                                        ? colorScheme.onSurfaceVariant
-                                        : colorScheme.onSurface,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  task.dueDate == null
-                                      ? task.category
-                                      : '${task.category} • '
-                                            '${DateFormat('MMM d, h:mm a').format(task.dueDate!)}',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Text(
-                            task.priority,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: taskFlowPrimary,
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'Edit task',
-                            onPressed: () => onEditTask(task),
-                            icon: const Icon(
-                              Icons.edit_outlined,
-                              color: taskFlowPrimary,
-                              size: 20,
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'Delete task',
-                            onPressed: () => onDeleteTask(task),
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              color: Colors.redAccent,
-                              size: 20,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-
-                if (tasks.length > 5)
-                  TextButton(
-                    onPressed: onViewAllTasks,
-                    child: Text('View all ${tasks.length} tasks'),
+                Text(
+                  '$completed of $total tasks completed',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                   ),
+                ),
+
+                const SizedBox(height: 7),
+
+                Text(
+                  total == 0
+                      ? 'Start by creating your first task.'
+                      : progress == 1
+                      ? 'Excellent! All tasks completed.'
+                      : 'Keep going. You are making progress!',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
               ],
             ),
+          ),
+
+          const SizedBox(width: 16),
+
+          TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: 0, end: progress),
+            duration: const Duration(milliseconds: 850),
+            curve: Curves.easeOutCubic,
+            builder: (context, animatedProgress, child) {
+              return SizedBox(
+                width: 86,
+                height: 86,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    SizedBox.expand(
+                      child: CircularProgressIndicator(
+                        value: animatedProgress,
+                        strokeWidth: 8,
+                        backgroundColor: Colors.white24,
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Colors.white,
+                        ),
+                        strokeCap: StrokeCap.round,
+                      ),
+                    ),
+                    Text(
+                      '${(animatedProgress * 100).round()}%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ======================================================
+// SUMMARY CARD
+// ======================================================
+
+class _SummaryCard extends StatelessWidget {
+  final String label;
+  final int value;
+  final IconData icon;
+  final Color color;
+
+  const _SummaryCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(19),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 43,
+            height: 43,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(icon, color: color, size: 23),
+          ),
+
+          const SizedBox(width: 11),
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TweenAnimationBuilder<double>(
+                  tween: Tween<double>(begin: 0, end: value.toDouble()),
+                  duration: const Duration(milliseconds: 650),
+                  builder: (context, animatedValue, child) {
+                    return Text(
+                      '${animatedValue.round()}',
+                      style: const TextStyle(
+                        fontSize: 23,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    );
+                  },
+                ),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ======================================================
+// RECENT TASK CARD
+// ======================================================
+
+class _AnimatedTaskCard extends StatelessWidget {
+  final Task task;
+  final ValueChanged<bool?> onToggle;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _AnimatedTaskCard({
+    super.key,
+    required this.task,
+    required this.onToggle,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  Color _getPriorityColor() {
+    switch (task.priority) {
+      case 'High':
+        return const Color(0xFFEF4444);
+      case 'Medium':
+        return const Color(0xFFF59E0B);
+      default:
+        return const Color(0xFF10B981);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final priorityColor = _getPriorityColor();
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(19),
+        border: Border.all(
+          color: task.isCompleted
+              ? const Color(0xFF10B981).withValues(alpha: 0.35)
+              : scheme.outlineVariant.withValues(alpha: 0.4),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.025),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: Row(
+          children: [
+            Checkbox(
+              value: task.isCompleted,
+              activeColor: taskFlowPrimary,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
+              onChanged: onToggle,
+            ),
+
+            const SizedBox(width: 4),
+
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 250),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: task.isCompleted
+                          ? scheme.onSurfaceVariant
+                          : scheme.onSurface,
+                      decoration: task.isCompleted
+                          ? TextDecoration.lineThrough
+                          : null,
+                    ),
+                    child: Text(
+                      task.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+
+                  if (task.description.isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    Text(
+                      task.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 7),
+
+                  Text(
+                    '${task.category}'
+                    '${task.dueDate == null ? '' : ' • ${DateFormat('MMM d, h:mm a').format(task.dueDate!)}'}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: priorityColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${task.priority} Priority',
+                      style: TextStyle(
+                        color: priorityColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            IconButton(
+              tooltip: 'Edit task',
+              onPressed: onEdit,
+              icon: const Icon(
+                Icons.edit_outlined,
+                color: taskFlowPrimary,
+                size: 20,
+              ),
+            ),
+
+            IconButton(
+              tooltip: 'Delete task',
+              onPressed: onDelete,
+              icon: const Icon(
+                Icons.delete_outline,
+                color: Colors.redAccent,
+                size: 20,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ======================================================
+// EMPTY TASK STATE
+// ======================================================
+
+class _EmptyTaskCard extends StatelessWidget {
+  const _EmptyTaskCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 76,
+            height: 76,
+            decoration: BoxDecoration(
+              color: taskFlowPrimary.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.task_alt_rounded,
+              color: taskFlowPrimary,
+              size: 39,
+            ),
+          ),
+
+          const SizedBox(height: 15),
+
+          const Text(
+            'Ready to get productive?',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+          ),
+
+          const SizedBox(height: 8),
+
+          Text(
+            'Your tasks will appear here.\n'
+            'Tap New Task to get started.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: scheme.onSurfaceVariant,
+              fontSize: 13,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
